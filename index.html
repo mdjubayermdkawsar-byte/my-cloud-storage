@@ -2,72 +2,95 @@
 <html lang="bn">
 <head>
   <meta charset="UTF-8">
-  <title>আমার ক্লাউড সার্ভার (Storage + Multi-Language Engine)</title>
+  <title>আমার ক্লাউড সার্ভার ও হোস্টিং প্ল্যাটফর্ম</title>
   <style>
-    body { font-family: sans-serif; background: #0f172a; color: white; margin: 0; padding: 20px; }
-    .box { background: #1e293b; padding: 20px; border-radius: 10px; max-width: 800px; margin: auto; }
-    select, button { padding: 10px; border-radius: 5px; font-size: 16px; margin-bottom: 10px; }
-    textarea { width: 95%; height: 200px; background: #020617; color: #38bdf8; font-family: monospace; padding: 10px; border-radius: 5px; border: 1px solid #334155; }
-    pre { background: #020617; padding: 15px; color: #4ade80; border-radius: 5px; border: 1px solid #334155; overflow-x: auto; }
+    body { font-family: sans-serif; background: #0b0f19; color: white; margin: 0; padding: 20px; }
+    .container { max-width: 900px; margin: auto; }
+    .card { background: #1e293b; padding: 25px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #334155; }
+    h2 { color: #38bdf8; margin-top: 0; }
+    input[type="text"], textarea { width: 95%; padding: 12px; background: #020617; color: #38bdf8; border: 1px solid #334155; border-radius: 6px; font-family: monospace; margin-bottom: 12px; }
+    button { background: #0284c7; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }
+    button:hover { background: #0369a1; }
+    .url-box { margin-top: 15px; padding: 15px; background: #020617; border-radius: 6px; border: 1px solid #22c55e; display: none; }
+    a { color: #4ade80; font-weight: bold; word-break: break-all; }
   </style>
 </head>
 <body>
 
-<div class="box">
-  <h2>⚡ আমার ক্লাউড সার্ভার (অল-ইন-ওয়ান)</h2>
-  <p>যেকোনো ভাষার কোড সরাসরি আমাদের সার্ভারে রান করুন (কোনো কিছু ডাউনলোড ছাড়া)</p>
+<div class="container">
+  <h1>⚡ ক্লাউড সার্ভার ও ওয়েবসাইট হোস্টিং হাব</h1>
 
-  <label>প্রোগ্রামিং ল্যাঙ্গুয়েজ সিলেক্ট করো:</label><br>
-  <select id="lang">
-    <option value="python">Python (v3.10)</option>
-    <option value="php">PHP (v8.2)</option>
-    <option value="java">Java (v15.0)</option>
-    <option value="csharp">C# (Mono 6.12)</option>
-    <option value="javascript">JavaScript (Node v18)</option>
-    <option value="c++">C++ (GCC 10)</option>
-  </select><br>
+  <!-- ওয়েবসাইট হোস্টিং সেকশন -->
+  <div class="card">
+    <h2>🚀 এক ক্লিকে ওয়েবসাইট লাইভ হোস্ট করুন</h2>
+    <p style="color: #94a3b8;">যেকোনো HTML, CSS, JS কোড নিচে পেস্ট করুন এবং লাইভ লিঙ্ক পেয়ে যান (আনলিমিটেড সাইট হোস্ট করতে পারবেন):</p>
+    
+    <input type="text" id="siteName" placeholder="ওয়েবসাইটের নাম (যেমন: My-Portfolio)"><br>
+    
+    <textarea id="htmlCode" style="height: 180px;" placeholder="তোমার HTML/CSS/JS কোড এখানে পেস্ট করো..."><!DOCTYPE html>
+<html>
+<head>
+  <title>আমার লাইভ ওয়েবসাইট</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 50px; background: #111; color: white; }
+    h1 { color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <h1>🎉 হ্যালো ওয়ার্ল্ড!</h1>
+  <p>এই ওয়েবসাইটটি সম্পূর্ণ ফ্রিতে আমাদের নিজস্ব ক্লাউড সার্ভার থেকে হোস্ট করা হয়েছে!</p>
+</body>
+</html></textarea><br>
 
-  <label>তোমার কোড লেখো:</label><br>
-  <textarea id="code">print("হ্যালো! আমাদের সার্ভার থেকে পাইথন রান হচ্ছে!")</textarea><br>
+    <button onclick="deployWebsite()">🌐 ওয়েবসাইট হোস্ট করো</button>
 
-  <button onclick="runCode()" style="background: #0284c7; color: white; border: none; cursor: pointer; font-weight: bold;">▶ কোড রান করো</button>
-
-  <h3>🖥️ সার্ভার রেজাল্ট (Output):</h3>
-  <pre id="output">এখানে আউটপুট দেখা যাবে...</pre>
+    <div class="url-box" id="urlBox">
+      <p style="color: #22c55e; margin: 0 0 10px 0;"><b>✅ ওয়েবসাইট সফলভাবে লাইভ হয়েছে!</b></p>
+      <span>লাইভ লিঙ্ক: </span><a id="siteLink" href="#" target="_blank"></a>
+    </div>
+  </div>
 </div>
 
 <script>
-  async function runCode() {
-    const lang = document.getElementById('lang').value;
-    const code = document.getElementById('code').value;
-    const output = document.getElementById('output');
+  async function deployWebsite() {
+    const siteName = document.getElementById('siteName').value;
+    const htmlCode = document.getElementById('htmlCode').value;
+    const urlBox = document.getElementById('urlBox');
+    const siteLink = document.getElementById('siteLink');
 
-    output.innerText = "⏳ সার্ভারে প্রসেসিং এবং রান হচ্ছে...";
+    if (!htmlCode) {
+      alert('দয়া করে কিছু HTML কোড লিখুন!');
+      return;
+    }
+
+    urlBox.style.display = 'block';
+    urlBox.style.borderColor = '#eab308';
+    urlBox.innerHTML = '<span style="color: #eab308;">⏳ ক্লাউড হোস্টিংয়ে ডেপ্লয় হচ্ছে... অপেক্ষা করুন...</span>';
 
     try {
-      const res = await fetch('/api/run', {
+      const res = await fetch('/api/site', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: lang, code: code })
+        body: JSON.stringify({ siteName: siteName, htmlCode: htmlCode })
       });
 
       const data = await res.json();
-      output.innerText = data.output || "কোনো আউটপুট নেই!";
+
+      if (data.success) {
+        urlBox.style.borderColor = '#22c55e';
+        urlBox.innerHTML = `
+          <p style="color: #22c55e; margin: 0 0 10px 0;"><b>🎉 ওয়েবসাইট সফলভাবে লাইভ হয়েছে!</b></p>
+          <span>সরাসরি ভিজিট করুন: </span><a href="${data.liveUrl}" target="_blank">${data.liveUrl}</a>
+        `;
+      } else {
+        urlBox.style.borderColor = '#ef4444';
+        urlBox.innerHTML = `<span style="color: #ef4444;">ব্যর্থ হয়েছে: ${data.error}</span>`;
+      }
     } catch (err) {
-      output.innerText = "এরর: " + err.message;
+      urlBox.style.borderColor = '#ef4444';
+      urlBox.innerHTML = `<span style="color: #ef4444;">এরর: ${err.message}</span>`;
     }
   }
-
-  // ল্যাঙ্গুয়েজ পরিবর্তন করলে ডিফল্ট কোড সেট হওয়া
-  document.getElementById('lang').addEventListener('change', function() {
-    const l = this.value;
-    const c = document.getElementById('code');
-    if (l === 'python') c.value = 'print("হ্যালো পাইথন!")';
-    if (l === 'php') c.value = '<?php echo "হ্যালো PHP!"; ?>';
-    if (l === 'java') c.value = 'public class Main {\n  public static void main(String[] args) {\n    System.out.println("হ্যালো Java!");\n  }\n}';
-    if (l === 'csharp') c.value = 'using System;\nclass Program {\n  static void Main() {\n    Console.WriteLine("হ্যালো C#!");\n  }\n}';
-    if (l === 'javascript') c.value = 'console.log("হ্যালো JavaScript!");';
-  });
 </script>
 
 </body>
