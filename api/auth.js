@@ -2,6 +2,46 @@ export const config = {
   runtime: 'edge',
 };
 
+// টেলিগ্রামের পিনড মেসেজ থেকে রিয়েল ডাটাবেজ পড়ার হেল্পার
+async function getCloudDB(token, chatId) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/getChat?chat_id=${chatId}`);
+    const data = await res.json();
+    if (data.ok && data.result.pinned_message && data.result.pinned_message.text) {
+      return { db: JSON.parse(data.result.pinned_message.text), msgId: data.result.pinned_message.message_id };
+    }
+  } catch (e) {}
+  return { db: { projects: {} }, msgId: null };
+}
+
+// টেলিগ্রামে পার্মানেন্ট ডাটাবেজ আপডেট করার হেল্পার
+async function saveCloudDB(token, chatId, db, msgId) {
+  const text = JSON.stringify(db);
+  if (msgId) {
+    const editRes = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: msgId, text })
+    });
+    const d = await editRes.json();
+    if (d.ok) return msgId;
+  }
+  const sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text })
+  });
+  const d = await sendRes.json();
+  if (d.ok) {
+    await fetch(`https://api.telegram.org/bot${token}/pinChatMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: d.result.message_id })
+    });
+    return d.result.message_id;
+  }
+}
+
 export default async function handler(req) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -9,87 +49,87 @@ export default async function handler(req) {
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers });
 
   const BOT_TOKEN = process.env.BOT_TOKEN;
   const CHANNEL_ID = process.env.CHANNEL_ID;
 
+  const { db, msgId } = await getCloudDB(BOT_TOKEN, CHANNEL_ID);
+
+  // ১. সকল সংরক্ষিত প্রজেক্টের লিস্ট ক্লাউড থেকে আনা (GET)
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const action = url.searchParams.get('action');
+
+    if (action === 'get_projects') {
+      const projectList = Object.keys(db.projects).map(k => ({
+        name: k,
+        email: db.projects[k].email
+      }));
+      return new Response(JSON.stringify({ success: true, projects: projectList }), {
+        status: 200, headers: { ...headers, 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers });
+  }
+
+  // ২. প্রজেক্ট তৈরি ও অথেন্টিকেশন (POST)
   if (req.method === 'POST') {
     try {
       const { action, projectKey, email, password } = await req.json();
+      const proj = projectKey ? projectKey.trim().replace(/\s+/g, '_') : '';
 
-      if (!projectKey || !email || !password) {
-        return new Response(JSON.stringify({ error: 'সবগুলো তথ্য পূরণ করতে হবে!' }), { status: 400, headers });
-      }
-
-      const proj = projectKey.trim().replace(/\s+/g, '_');
-
-      // টেলিগ্রাম ক্লাউড হিস্ট্রি থেকে এই প্রজেক্টের আসল ডাটা খোঁজা
-      const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?limit=100`);
-      const tgData = await tgRes.json();
-
-      let registeredAdmin = null;
-
-      if (tgData.ok && tgData.result) {
-        // টেলিগ্রাম মেসেজ চেক করা
-        for (let update of tgData.result) {
-          const msg = update.channel_post || update.message;
-          if (msg && msg.text && msg.text.startsWith(`[ADMIN_AUTH:${proj}]`)) {
-            try {
-              registeredAdmin = JSON.parse(msg.text.replace(`[ADMIN_AUTH:${proj}]`, ''));
-            } catch (e) {}
-          }
-        }
-      }
-
-      // ১. কনসোল থেকে নতুন প্রজেক্ট তৈরি ও অ্যাডমিন সেট করা
+      // ক. নতুন প্রজেক্ট তৈরি ও ক্লাউডে পার্মানেন্ট সেভ
       if (action === 'create_admin') {
-        if (registeredAdmin) {
-          return new Response(JSON.stringify({ error: 'এই প্রজেক্টের অ্যাডমিন ইতোমধ্যেই নির্ধারিত আছে!' }), { status: 400, headers });
+        if (!proj || !email || !password) {
+          return new Response(JSON.stringify({ error: 'All fields required' }), { status: 400, headers });
+        }
+        if (db.projects[proj]) {
+          return new Response(JSON.stringify({ error: 'Project already exists!' }), { status: 400, headers });
         }
 
-        const adminData = { email: email.trim(), password: password.trim() };
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: CHANNEL_ID, text: `[ADMIN_AUTH:${proj}]${JSON.stringify(adminData)}` })
-        });
+        db.projects[proj] = { email: email.trim(), password: password.trim(), users: [] };
+        await saveCloudDB(BOT_TOKEN, CHANNEL_ID, db, msgId);
 
-        return new Response(JSON.stringify({ success: true, message: 'অ্যাডমিন অ্যাকাউন্ট সুরক্ষিতভাবে তৈরি হয়েছে!' }), { status: 200, headers });
+        return new Response(JSON.stringify({ success: true, message: 'Project created & saved permanently!' }), {
+          status: 200, headers: { ...headers, 'Content-Type': 'application/json' }
+        });
       }
 
-      // ২. অ্যাডমিন প্যানেল লগইন (এখানেই আসল কড়া ফিল্টার!)
+      // খ. কঠোর অ্যাডমিন লগইন
       if (action === 'admin_login') {
-        // যদি প্রজেক্টটির কোনো অ্যাডমিন ক্লাউডে রেজিস্টার না থাকে
-        if (!registeredAdmin) {
-          return new Response(JSON.stringify({ error: '🚫 এই নামের কোনো প্রজেক্ট পাওয়া যায়নি! আগে মাস্টার কনসোল থেকে প্রজেক্ট তৈরি করুন।' }), { status: 404, headers });
+        const targetProj = db.projects[proj];
+        if (!targetProj) {
+          return new Response(JSON.stringify({ error: 'Project not found!' }), { status: 404, headers });
         }
-
-        // ইমেইল এবং পাসওয়ার্ড হুবহু মিলতে হবে
-        if (registeredAdmin.email === email.trim() && registeredAdmin.password === password.trim()) {
-          return new Response(JSON.stringify({ success: true, message: 'স্বাগতম অ্যাডমিন! লগইন সফল হয়েছে।' }), { status: 200, headers });
+        if (targetProj.email === email.trim() && targetProj.password === password.trim()) {
+          return new Response(JSON.stringify({ success: true, message: 'Admin login success!' }), {
+            status: 200, headers: { ...headers, 'Content-Type': 'application/json' }
+          });
         } else {
-          // যেকোনো ভিন্ন ইমেইল বা পাসওয়ার্ড দিলে সাথে সাথে ব্লক
-          return new Response(JSON.stringify({ error: '🚫 অ্যাক্সেস ডিনাইড! আপনি এই প্রজেক্টের বৈধ অ্যাডমিন নন অথবা ভুল তথ্য দিয়েছেন।' }), { status: 401, headers });
+          return new Response(JSON.stringify({ error: 'Access Denied: Invalid Admin Credentials!' }), {
+            status: 401, headers: { ...headers, 'Content-Type': 'application/json' }
+          });
         }
       }
 
-      // ৩. সাধারণ ইউজার সাইন-আপ
+      // গ. সাধারণ ইউজার সাইন-আপ
       if (action === 'signup') {
-        if (registeredAdmin && registeredAdmin.email === email.trim()) {
-          return new Response(JSON.stringify({ error: 'এই ইমেইলটি অ্যাডমিনের জন্য সংরক্ষিত!' }), { status: 400, headers });
+        const targetProj = db.projects[proj];
+        if (!targetProj) {
+          return new Response(JSON.stringify({ error: 'Project not found!' }), { status: 404, headers });
+        }
+        if (targetProj.email === email.trim()) {
+          return new Response(JSON.stringify({ error: 'This email is reserved for Admin!' }), { status: 400, headers });
         }
 
-        const newUser = { email: email.trim(), password: password.trim(), role: 'user', createdAt: new Date().toLocaleString('bn-BD') };
-        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: CHANNEL_ID, text: `[USER_DB:${proj}]${JSON.stringify(newUser)}` })
-        });
+        targetProj.users.push({ email: email.trim(), password: password.trim(), createdAt: new Date().toISOString() });
+        await saveCloudDB(BOT_TOKEN, CHANNEL_ID, db, msgId);
 
-        return new Response(JSON.stringify({ success: true, message: 'ইউজার সাইন-আপ সম্পন্ন!' }), { status: 200, headers });
+        return new Response(JSON.stringify({ success: true, message: 'User registered!' }), {
+          status: 200, headers: { ...headers, 'Content-Type': 'application/json' }
+        });
       }
 
     } catch (err) {
