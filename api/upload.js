@@ -17,7 +17,7 @@ export default async function handler(req) {
   const CHANNEL_ID = process.env.CHANNEL_ID;
   const host = req.headers.get('host');
 
-  // ১. ওয়েবসাইট ওপেন হলে পূর্বে আপলোড করা সমস্ত পোস্ট লোড করা (GET)
+  // ১. ওয়েবসাইট ওপেন হলে ক্লাউড থেকে সব পোস্ট আনা (GET)
   if (req.method === 'GET') {
     const url = new URL(req.url);
     const projectKey = url.searchParams.get('projectKey') || 'default';
@@ -29,9 +29,12 @@ export default async function handler(req) {
     if (tgData.ok && tgData.result) {
       tgData.result.forEach(u => {
         const msg = u.channel_post || u.message;
-        if (msg && msg.caption && msg.caption.startsWith(`[SERVICE_DB:${projectKey}]`)) {
+        // টেক্সট অথবা ক্যাপশন—দুটোই চেক করা হচ্ছে
+        const content = msg ? (msg.text || msg.caption || '') : '';
+
+        if (content.startsWith(`[SERVICE_DB:${projectKey}]`)) {
           try {
-            const jsonStr = msg.caption.replace(`[SERVICE_DB:${projectKey}]`, '');
+            const jsonStr = content.replace(`[SERVICE_DB:${projectKey}]`, '');
             posts.push(JSON.parse(jsonStr));
           } catch(e) {}
         }
@@ -43,7 +46,7 @@ export default async function handler(req) {
     });
   }
 
-  // ২. নতুন সার্ভিস ও ফাইল ক্লাউডে পার্মানেন্ট আপলোড করা (POST)
+  // ২. নতুন সার্ভিস ও ফাইল আপলোড করা (POST)
   if (req.method === 'POST') {
     try {
       const incomingFormData = await req.formData();
@@ -56,6 +59,7 @@ export default async function handler(req) {
         return new Response(JSON.stringify({ error: 'No file uploaded' }), { status: 400, headers: corsHeaders });
       }
 
+      // ফাইল পাঠানো
       const tgFormData = new FormData();
       tgFormData.append('chat_id', CHANNEL_ID);
       tgFormData.append('document', file, file.name);
@@ -67,13 +71,13 @@ export default async function handler(req) {
 
       const tgData = await tgRes.json();
       if (!tgData.ok) {
-        return new Response(JSON.stringify({ error: 'Telegram upload failed' }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: 'Telegram upload failed', details: tgData }), { status: 500, headers: corsHeaders });
       }
 
       const fileId = tgData.result.document.file_id;
       const downloadUrl = `https://${host}/api/file?id=${fileId}`;
 
-      // ফাইলের লিংক এবং টাইটেল ক্লাউড ডাটাবেজে স্থায়ীভাবে সেভ রাখা
+      // টেক্সট ডাটাবেজ মেসেজ পাঠানো
       const postData = { title, desc, imgUrl: downloadUrl, createdAt: new Date().toLocaleDateString() };
       await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         method: 'POST',
